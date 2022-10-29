@@ -1,11 +1,12 @@
-namespace main {
+nspace {
 	printf = (format string, args ...) u32;
+
 	pow = (a f64, b f64) f64;
+
+
 	print = (num f64) {
-		printf('gogadoda: %f\n', pow(num, 2.));
+                printf('gogadoda: %f\n', pow(num, 2.));
 	};
 
 	print(444.);
-	print(56.);
-
 }

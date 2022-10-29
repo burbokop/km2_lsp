@@ -2,8 +2,7 @@
 #include <km2/lsp/service.h>
 #include "service.h"
 #include "models.h"
-#include <wall_e/variant.h>
-
+#include <wall_e/models/variant.h>
 
 Napi::Object Service::RegisterType(Napi::Env env, Napi::Object exports) {
 	const auto typeName = wall_e::type_name<Service>();
@@ -27,6 +26,7 @@ Napi::Object Service::RegisterType(Napi::Env env, Napi::Object exports) {
 
 Service::Service(const Napi::CallbackInfo& info) : Napi::ObjectWrap<Service>(info) {
   Napi::Env env = info.Env();
+  (void)env;
   //Napi::Number value = info[0].As<Napi::Number>();
   //this->_value = value.DoubleValue();
 }

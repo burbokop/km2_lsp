@@ -1,1 +1,0 @@
-cmd_Release/km2lsp_node_service.node := ln -f "Release/obj.target/km2lsp_node_service.node" "Release/km2lsp_node_service.node" 2>/dev/null || (rm -rf "Release/km2lsp_node_service.node" && cp -af "Release/obj.target/km2lsp_node_service.node" "Release/km2lsp_node_service.node")

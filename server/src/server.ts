@@ -68,9 +68,13 @@ let hasDiagnosticRelatedInformationCapability = false;
 
 import fs = require('fs');
 const logg = (...args: any) => fs.appendFileSync(
-	'/home/borys/projects/node/lsp-sample/server/default.log', 
+	'/tmp/km2-lsp-default.log',
 	`${JSON.stringify(args)}\n`
 	);
+
+
+const errLogFile = fs.createWriteStream('/tmp/km2-lsp-default.err.log');
+process.stderr.write = errLogFile.write.bind(errLogFile) as any;
 
 logg('Start');
 connection.onInitialize((params: InitializeParams) => {
@@ -247,39 +251,35 @@ documents.onDidChangeContent(change => {
 
 	const errs: km2.CompilationError[] = km2_service.changeContent(change.document.uri, change.document.getText());
 
-	//logg('did change content errs', errs);
-
 	validateTextDocument(change.document, errs);
 });
 
+function km2SeverityToDiagnosticSeverity(s: km2.Severity): DiagnosticSeverity|undefined {
+	if(s == km2.Severity.Err) {
+		return DiagnosticSeverity.Error;
+	} else if(s == km2.Severity.Warn) {
+		return DiagnosticSeverity.Warning;
+	} else if(s == km2.Severity.Info) {
+		return DiagnosticSeverity.Information;
+	} else if(s == km2.Severity.Hint) {
+		return DiagnosticSeverity.Hint;
+	} 
+	return undefined;
+}
 
-async function validateTextDocument(textDocument: TextDocument, errs: km2.CompilationError[]): Promise<void> {
+
+function validateTextDocument(textDocument: TextDocument, errs: km2.CompilationError[]) {
 	// In this simple example we get the settings for every validate run.
-	const settings = await getDocumentSettings(textDocument.uri);
+	const settings = getDocumentSettings(textDocument.uri);
 
 	// The validator creates diagnostics for all uppercase words length 2 and more
 	const text = textDocument.getText();
 	const pattern = /\b[A-Z]{2,}\b/g;
 	let m: RegExpExecArray | null;
 
-	const transformSeverity = (s: km2.Severity): DiagnosticSeverity|undefined => {
-		if(s == km2.Severity.Err) {
-			return DiagnosticSeverity.Error;
-		} else if(s == km2.Severity.Warn) {
-			return DiagnosticSeverity.Warning;
-		} else if(s == km2.Severity.Info) {
-			return DiagnosticSeverity.Information;
-		} else if(s == km2.Severity.Hint) {
-			return DiagnosticSeverity.Hint;
-		} 
-		return undefined;
-	};
-
-
-	const problems = 0;
 	const diagnostics: Diagnostic[] = errs.map((err: km2.CompilationError): Diagnostic => {
 		const diagnostic: Diagnostic = {
-			severity: transformSeverity(err.severity),
+			severity: km2SeverityToDiagnosticSeverity(err.severity),
 			range: {
 				start: textDocument.positionAt(err.segment.begin),
 				end: textDocument.positionAt(err.segment.end)

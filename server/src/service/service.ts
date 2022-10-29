@@ -7,12 +7,12 @@ export interface TextSegment {
 	end: integer;
 }
 
-export declare type Severity = 0 | 1 | 2 | 3;
-export declare namespace Severity {
-    const Err: 0;
-    const Warn: 1;
-    const Info: 2;
-    const Hint: 3;
+//export declare type Severity = 0 | 1 | 2 | 3;
+export enum Severity {
+    Err = 0,
+    Warn = 1,
+    Info = 2,
+    Hint = 3,
 }
 
 
