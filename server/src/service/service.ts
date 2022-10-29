@@ -15,6 +15,35 @@ export enum Severity {
     Hint = 3,
 }
 
+export interface Token {
+	name: string;
+	text: string;
+	segment: TextSegment;
+	undef: boolean;
+}
+
+export interface TextWidePosition {
+    line: number;
+    character: number;
+    length: number;
+}
+
+export interface SemanticToken {
+	type: number;
+	modifier: number;	
+	segment: TextSegment;
+	position: TextWidePosition;
+}
+
+export interface SemanticTokensClientCapability {
+	tokenTypes: string[];
+	tokenModifiers: string[];
+}
+
+export interface SemanticTokensLegend {
+	tokenTypes: string[];
+	tokenModifiers: string[];
+}
 
 export interface CompilationError {
 	message: string;
@@ -28,8 +57,20 @@ export class Service {
 		this.native = new native_package.Service();
 	}
 
+	registerSemanticTokens(clientCap: SemanticTokensClientCapability): SemanticTokensLegend {
+		return this.native.registerSemanticTokens(clientCap);
+	}
+
 	changeContent(uri: string, content: string): CompilationError[] {
 		return this.native.changeContent(uri, content);
+	}
+
+	tokens(uri: string): Token[] {
+		return this.native.tokens(uri);
+	}
+
+	semanticTokens(uri: string): SemanticToken[] {
+		return this.native.semanticTokens(uri);
 	}
 
 	hover(uri: string, line: integer, character: integer): string|undefined {

@@ -34,7 +34,14 @@ import {
 	InitializedParams,
 	SemanticTokensDelta,
 	SemanticTokensDeltaPartialResult,
-	SemanticTokensDeltaRequest
+	SemanticTokensDeltaRequest,
+	SemanticTokenTypes,
+	SemanticTokensRangeParams,
+	SemanticTokensRangeRequest,
+	SemanticTokensBuilder,
+	SemanticTokensClientCapabilities,
+	SemanticTokensLegend,
+	Range
 } from 'vscode-languageserver/node';
 
 import {
@@ -77,6 +84,56 @@ const errLogFile = fs.createWriteStream('/tmp/km2-lsp-default.err.log');
 process.stderr.write = errLogFile.write.bind(errLogFile) as any;
 
 logg('Start');
+
+
+
+enum TokenTypes {
+	type = 1,
+	class = 2,
+	enumMember = 3,
+	typeParameter = 4,
+	parameter = 5,
+	variable = 6,
+	function = 7,
+	macro = 8,
+	keyword = 9,
+	comment = 10,
+	string = 11,
+	number = 12,
+	operator = 13,
+	_ = 14
+}
+
+enum TokenModifiers {
+	declaration = 1,
+	definition = 2,
+	_ = 3
+}
+
+/*
+function computeLegend(capability: SemanticTokensClientCapabilities): SemanticTokensLegend {
+	const clientTokenTypes = new Set<string>(capability.tokenTypes);
+	const clientTokenModifiers = new Set<string>(capability.tokenModifiers);
+	const tokenTypes: string[] = [];
+	for (let i = 0; i < TokenTypes._; i++) {
+		const str = TokenTypes[i];
+		if (clientTokenTypes.has(str)) {
+			tokenTypes.push(str);
+		}
+	}
+
+	const tokenModifiers: string[] = [];
+	for (let i = 0; i < TokenModifiers._; i++) {
+		const str = TokenModifiers[i];
+		if (clientTokenModifiers.has(str)) {
+			tokenModifiers.push(str);
+		}
+	}
+
+	return { tokenTypes, tokenModifiers };
+}*/
+
+
 connection.onInitialize((params: InitializeParams) => {
 
 
@@ -98,18 +155,17 @@ connection.onInitialize((params: InitializeParams) => {
 		capabilities.textDocument.publishDiagnostics.relatedInformation
 	);
 
+	const semanticTokensLegend = km2_service.registerSemanticTokens(params.capabilities.textDocument!.semanticTokens!);
+
+	logg('registerSemanticTokens', params.capabilities.textDocument!.semanticTokens!, "->", semanticTokensLegend);
+
+	//const semanticTokensLegend = computeLegend(params.capabilities.textDocument!.semanticTokens!);
 	const result: InitializeResult = {
 		capabilities: {
 			documentHighlightProvider: true,
 			semanticTokensProvider: {
 				full: { delta: true },
-				legend: {
-					tokenTypes: [
-						"TOK_GOGADODA",
-						"fn"
-					],
-					tokenModifiers: []
-				}
+				legend: semanticTokensLegend
 			},
 			colorProvider: true,
 			textDocumentSync: TextDocumentSyncKind.Incremental,
@@ -129,6 +185,8 @@ connection.onInitialize((params: InitializeParams) => {
 	}
 
 	result.capabilities.hoverProvider = true;
+
+	logg('onInitialize.result', result);
 
 	return result;
 });
@@ -157,35 +215,77 @@ interface ExampleSettings {
 const defaultSettings: ExampleSettings = { maxNumberOfProblems: 1000 };
 let globalSettings: ExampleSettings = defaultSettings;
 
-// Cache the settings of all open documents
 const documentSettings: Map<string, Thenable<ExampleSettings>> = new Map();
+const tokenBuilders: Map<string, SemanticTokensBuilder> = new Map();
+
+function getTokenBuilder(document: TextDocument): SemanticTokensBuilder {
+	let result = tokenBuilders.get(document.uri);
+	if (result !== undefined) {
+		return result;
+	}
+	result = new SemanticTokensBuilder();
+	tokenBuilders.set(document.uri, result);
+	return result;
+}
+function buildTokens(builder: SemanticTokensBuilder, document: TextDocument) {
+	const toks = km2_service.semanticTokens(document.uri);
 
 
+	for(const token of toks) {
+		const textAtSegment = document.getText({ start: document.positionAt(token.segment.begin), end: document.positionAt(token.segment.end) });
+		const textAtPosition = document.getText({ 
+			start: { line: token.position.line, character: token.position.character }, 
+			end: { line: token.position.line, character: token.position.character + token.position.length } 
+		});
 
-connection.onRequest<
-	SemanticTokensParams, 
-	SemanticTokens | null, 
-	SemanticTokensPartialResult, 
-	void, 
-	SemanticTokensRegistrationOptions
->(SemanticTokensRequest.type, (p: SemanticTokensParams): SemanticTokens | null => {
-	logg('SemanticTokensRequest.type', p);
-	return {
-		data: [0]
-	};
+		logg('token: ', token, textAtSegment, textAtPosition);
+
+		builder.push(token.position.line, token.position.character, token.position.length, token.type, token.modifier);
+	}
+
+	//const text = document.getText();
+	//const regexp = /\w+/g;
+	//let match: RegExpMatchArray;
+	//let tokenCounter = 0;
+	//let modifierCounter = 0;
+	//while ((match = regexp.exec(text) as RegExpMatchArray) !== null) {
+	//	const word = match[0];
+	//	const position = document.positionAt(match.index as number);
+	//	const tokenType = tokenCounter % TokenTypes._;
+	//	const tokenModifier = 1 << modifierCounter % TokenModifiers._;
+	//	builder.push(position.line, position.character, word.length, tokenType, tokenModifier);
+	//	tokenCounter++;
+	//	modifierCounter++;
+	//}
+}
+
+connection.languages.semanticTokens.on(params => {
+	const document = documents.get(params.textDocument.uri);
+	if (document === undefined) {
+		return { data: [] };
+	}
+	const builder = getTokenBuilder(document);
+	buildTokens(builder, document);
+	return builder.build();
+});
+
+connection.languages.semanticTokens.onDelta((params) => {
+	const document = documents.get(params.textDocument.uri);
+	if (document === undefined) {
+		return { edits: [] };
+	}
+	const builder = getTokenBuilder(document);
+	builder.previousResult(params.previousResultId);
+	buildTokens(builder, document);
+	return builder.buildEdits();
+});
+
+connection.languages.semanticTokens.onRange((params) => {
+	return { data: [] };
 });
 
 
-connection.onRequest<
-	SemanticTokensDeltaParams, 
-	SemanticTokens | SemanticTokensDelta | null, 
-	SemanticTokensPartialResult | SemanticTokensDeltaPartialResult, 
-	void, 
-	SemanticTokensRegistrationOptions
->(SemanticTokensDeltaRequest.type, (p: SemanticTokensDeltaParams): SemanticTokens | SemanticTokensDelta | null => {
-	logg('SemanticTokensDeltaRequest.type', p);
-	return null;
-});
+
 
 connection.onDocumentColor((p: DocumentColorParams): ColorInformation[] | undefined => {
 	logg('onDocumentColor', p);
@@ -241,6 +341,8 @@ function getDocumentSettings(resource: string): Thenable<ExampleSettings> {
 // Only keep settings for open documents
 documents.onDidClose(e => {
 	logg('onDidClose', e);
+
+	tokenBuilders.delete(e.document.uri);
 	documentSettings.delete(e.document.uri);
 });
 
@@ -267,16 +369,7 @@ function km2SeverityToDiagnosticSeverity(s: km2.Severity): DiagnosticSeverity|un
 	return undefined;
 }
 
-
 function validateTextDocument(textDocument: TextDocument, errs: km2.CompilationError[]) {
-	// In this simple example we get the settings for every validate run.
-	const settings = getDocumentSettings(textDocument.uri);
-
-	// The validator creates diagnostics for all uppercase words length 2 and more
-	const text = textDocument.getText();
-	const pattern = /\b[A-Z]{2,}\b/g;
-	let m: RegExpExecArray | null;
-
 	const diagnostics: Diagnostic[] = errs.map((err: km2.CompilationError): Diagnostic => {
 		const diagnostic: Diagnostic = {
 			severity: km2SeverityToDiagnosticSeverity(err.severity),
@@ -306,9 +399,8 @@ function validateTextDocument(textDocument: TextDocument, errs: km2.CompilationE
 			];
 		}
 		return diagnostic;
-	}); 
+	});
 
-	// Send the computed diagnostics to VSCode.
 	connection.sendDiagnostics({ uri: textDocument.uri, diagnostics });
 }
 
