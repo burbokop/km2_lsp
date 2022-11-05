@@ -21,4 +21,4 @@ Napi::Object init(Napi::Env env, Napi::Object exports) {
     return exports;
 };
 
-NODE_API_MODULE(hello, init);
+NODE_API_MODULE(km2lsp_node_service, init);

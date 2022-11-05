@@ -41,7 +41,8 @@ import {
 	SemanticTokensBuilder,
 	SemanticTokensClientCapabilities,
 	SemanticTokensLegend,
-	Range
+	Range,
+	integer
 } from 'vscode-languageserver/node';
 
 import {
@@ -73,19 +74,12 @@ let hasConfigurationCapability = false;
 let hasWorkspaceFolderCapability = false;
 let hasDiagnosticRelatedInformationCapability = false;
 
-import fs = require('fs');
-const logg = (...args: any) => fs.appendFileSync(
-	'/tmp/km2-lsp-default.log',
-	`${JSON.stringify(args)}\n`
-	);
 
+import logs from './logs';
 
-const errLogFile = fs.createWriteStream('/tmp/km2-lsp-default.err.log');
-process.stderr.write = errLogFile.write.bind(errLogFile) as any;
+const logger = logs(process, 'lsp-sample-server');
 
-logg('Start');
-
-
+logger.info('Start');
 
 enum TokenTypes {
 	type = 1,
@@ -133,12 +127,12 @@ function computeLegend(capability: SemanticTokensClientCapabilities): SemanticTo
 	return { tokenTypes, tokenModifiers };
 }*/
 
+let semanticTokensLegend: km2.SemanticTokensLegend; // DEBUG ONLY
 
 connection.onInitialize((params: InitializeParams) => {
 
 
-
-	logg('onInitialize', params);
+	logger.debug('onInitialize', params);
 	const capabilities = params.capabilities;
 
 	// Does the client support the `workspace/configuration` request?
@@ -155,9 +149,9 @@ connection.onInitialize((params: InitializeParams) => {
 		capabilities.textDocument.publishDiagnostics.relatedInformation
 	);
 
-	const semanticTokensLegend = km2_service.registerSemanticTokens(params.capabilities.textDocument!.semanticTokens!);
+	semanticTokensLegend = km2_service.registerSemanticTokens(params.capabilities.textDocument!.semanticTokens!);
 
-	logg('registerSemanticTokens', params.capabilities.textDocument!.semanticTokens!, "->", semanticTokensLegend);
+	logger.debug('registerSemanticTokens', params.capabilities.textDocument!.semanticTokens!, "->", semanticTokensLegend);
 
 	//const semanticTokensLegend = computeLegend(params.capabilities.textDocument!.semanticTokens!);
 	const result: InitializeResult = {
@@ -186,13 +180,13 @@ connection.onInitialize((params: InitializeParams) => {
 
 	result.capabilities.hoverProvider = true;
 
-	logg('onInitialize.result', result);
+	logger.debug('onInitialize.result', result);
 
 	return result;
 });
 
 connection.onInitialized((params: InitializedParams) => {
-	logg('onInitialized', params);
+	logger.debug('onInitialized', params);
 	if (hasConfigurationCapability) {
 		// Register for all configuration changes.
 		connection.client.register(DidChangeConfigurationNotification.type, undefined);
@@ -230,7 +224,6 @@ function getTokenBuilder(document: TextDocument): SemanticTokensBuilder {
 function buildTokens(builder: SemanticTokensBuilder, document: TextDocument) {
 	const toks = km2_service.semanticTokens(document.uri);
 
-
 	for(const token of toks) {
 		const textAtSegment = document.getText({ start: document.positionAt(token.segment.begin), end: document.positionAt(token.segment.end) });
 		const textAtPosition = document.getText({ 
@@ -238,25 +231,10 @@ function buildTokens(builder: SemanticTokensBuilder, document: TextDocument) {
 			end: { line: token.position.line, character: token.position.character + token.position.length } 
 		});
 
-		logg('token: ', token, textAtSegment, textAtPosition);
+		logger.debug('token: ', token, textAtSegment, semanticTokensLegend.tokenTypes[token.type]);
 
 		builder.push(token.position.line, token.position.character, token.position.length, token.type, token.modifier);
 	}
-
-	//const text = document.getText();
-	//const regexp = /\w+/g;
-	//let match: RegExpMatchArray;
-	//let tokenCounter = 0;
-	//let modifierCounter = 0;
-	//while ((match = regexp.exec(text) as RegExpMatchArray) !== null) {
-	//	const word = match[0];
-	//	const position = document.positionAt(match.index as number);
-	//	const tokenType = tokenCounter % TokenTypes._;
-	//	const tokenModifier = 1 << modifierCounter % TokenModifiers._;
-	//	builder.push(position.line, position.character, word.length, tokenType, tokenModifier);
-	//	tokenCounter++;
-	//	modifierCounter++;
-	//}
 }
 
 connection.languages.semanticTokens.on(params => {
@@ -288,12 +266,19 @@ connection.languages.semanticTokens.onRange((params) => {
 
 
 connection.onDocumentColor((p: DocumentColorParams): ColorInformation[] | undefined => {
-	logg('onDocumentColor', p);
+	logger.debug('onDocumentColor', p);
 	return undefined;
 });
 
-connection.onHover((params: TextDocumentPositionParams): Hover|undefined => {
-	const result = km2_service.hover(params.textDocument.uri, params.position.line, params.position.character);
+connection.onHover((params: HoverParams): Hover|undefined => {
+
+
+	logger.debug("onHover:", params);
+
+	const document = documents.get(params.textDocument.uri);
+
+	const result = km2_service.hover(params.textDocument.uri, document?.offsetAt(params.position) as integer);
+	logger.debug("hover result:", result);
 	if(typeof result == 'string') {
 		return {
 			contents: {
@@ -308,7 +293,7 @@ connection.onHover((params: TextDocumentPositionParams): Hover|undefined => {
 
 
 connection.onDidChangeConfiguration(change => {
-	logg('onDidChangeConfiguration', change);
+	logger.debug('onDidChangeConfiguration', change);
 	if (hasConfigurationCapability) {
 		// Reset all cached document settings
 		documentSettings.clear();
@@ -323,7 +308,7 @@ connection.onDidChangeConfiguration(change => {
 });
 
 function getDocumentSettings(resource: string): Thenable<ExampleSettings> {
-	logg('getDocumentSettings', resource);
+	logger.debug('getDocumentSettings', resource);
 	if (!hasConfigurationCapability) {
 		return Promise.resolve(globalSettings);
 	}
@@ -340,7 +325,7 @@ function getDocumentSettings(resource: string): Thenable<ExampleSettings> {
 
 // Only keep settings for open documents
 documents.onDidClose(e => {
-	logg('onDidClose', e);
+	logger.debug('onDidClose', e);
 
 	tokenBuilders.delete(e.document.uri);
 	documentSettings.delete(e.document.uri);
@@ -349,7 +334,7 @@ documents.onDidClose(e => {
 // The content of a text document has changed. This event is emitted
 // when the text document first opened or when its content has changed.
 documents.onDidChangeContent(change => {
-	logg('did change content', change);
+	logger.debug('did change content', change);
 
 	const errs: km2.CompilationError[] = km2_service.changeContent(change.document.uri, change.document.getText());
 
@@ -405,7 +390,7 @@ function validateTextDocument(textDocument: TextDocument, errs: km2.CompilationE
 }
 
 connection.onDidChangeWatchedFiles(_change => {
-	logg('onDidChangeWatchedFiles', _change);
+	logger.debug('onDidChangeWatchedFiles', _change);
 	// Monitored files have change in VSCode
 	connection.console.log('We received an file change event');
 });
@@ -413,7 +398,7 @@ connection.onDidChangeWatchedFiles(_change => {
 // This handler provides the initial list of the completion items.
 connection.onCompletion(
 	(_textDocumentPosition: TextDocumentPositionParams): CompletionItem[] => {
-		logg('onCompletion', _textDocumentPosition);
+		logger.debug('onCompletion', _textDocumentPosition);
 
 		const result = km2_service.complete(
 			_textDocumentPosition.textDocument.uri,
@@ -425,21 +410,21 @@ connection.onCompletion(
 				data: index
 			};});
 
-		logg('\tresult:', result);
+			logger.debug('\tresult:', result);
 
 		return result;
 	});
 
 connection.onDocumentHighlight((highlight: DocumentHighlightParams): DocumentHighlight[] | null => {
-	logg('onDocumentHighlight', highlight);
+	logger.debug('onDocumentHighlight', highlight);
 
 
 
 	return [
-		{
-			range: { start: { line: 0, character: 0 }, end: { line: 1, character: 0 } },
-			kind: DocumentHighlightKind.Read
-		}
+		//{
+		//	range: { start: { line: 0, character: 0 }, end: { line: 1, character: 0 } },
+		//	kind: DocumentHighlightKind.Read
+		//}
 	];
 });
 
@@ -447,7 +432,7 @@ connection.onDocumentHighlight((highlight: DocumentHighlightParams): DocumentHig
 // the completion list.
 connection.onCompletionResolve(
 	(item: CompletionItem): CompletionItem => {
-		logg('onCompletionResolve', item);
+		logger.debug('onCompletionResolve', item);
 		if (item.data === 1) {
 			item.detail = 'TypeScript details';
 			item.documentation = 'TypeScript documentation';

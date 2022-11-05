@@ -5,6 +5,8 @@
 #include <wall_e/models/variant.h>
 #include <fstream>
 
+#include <iostream>
+
 std::ostream& log() { 
 	static std::ofstream result("/tmp/km2-lsp-default.native.log");
 	return result;
@@ -12,6 +14,8 @@ std::ostream& log() {
 
 Napi::Object Service::RegisterType(Napi::Env env, Napi::Object exports) {
 	const auto typeName = wall_e::type_name<Service>();
+
+	std::cout << "REGISTERING TYPE: '" << typeName << "'" << std::endl;
 
     // This method is used to hook the accessor and method callbacks
     Napi::Function func = DefineClass(env, typeName.c_str(), {
@@ -68,12 +72,11 @@ Napi::Value Service::SemanticTokens(const Napi::CallbackInfo& info) {
 Napi::Value Service::Hover(const Napi::CallbackInfo& info) {
 	Napi::Env env = info.Env();
 	const auto uri = info[0].As<Napi::String>();
-	const auto line = info[1].As<Napi::Number>();
-	const auto character = info[2].As<Napi::Number>();
+	const auto offset = info[1].As<Napi::Number>();
 
-	const auto predicate = wall_e::text_segment::line_char_predicate(line.operator unsigned int(), character.operator unsigned int());
+	//const auto predicate = wall_e::text_segment::line_char_predicate(line.operator unsigned int(), character.operator unsigned int());
 
-	if(const auto result = m_native.hover(uri, predicate)) {
+	if(const auto result = m_native.hover(uri, offset.operator unsigned int())) {
 		return Napi::String::New(env, result.value());
 	} else {
 		return env.Undefined();

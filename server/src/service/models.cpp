@@ -50,10 +50,10 @@ Napi::Object to_object(Napi::Env env, const km2::lsp::semantic_tokens_client_cap
 
 template<>
 km2::lsp::semantic_tokens_client_capability from_object<km2::lsp::semantic_tokens_client_capability>(Napi::Object obj) {
-	return km2::lsp::semantic_tokens_client_capability {
-		.token_types = km2::lsp::parse_semantic_token_types(vec_from_array_of_strings(obj.Get("tokenTypes").As<Napi::Array>())),
-		.token_modifiers = km2::lsp::parse_semantic_token_modifiers(vec_from_array_of_strings(obj.Get("tokenModifiers").As<Napi::Array>()))
-	};
+	km2::lsp::semantic_tokens_client_capability result;
+	result.token_types = km2::lsp::parse_semantic_token_types(vec_from_array_of_strings(obj.Get("tokenTypes").As<Napi::Array>()));
+	result.token_modifiers = km2::lsp::parse_semantic_token_modifiers(vec_from_array_of_strings(obj.Get("tokenModifiers").As<Napi::Array>()));
+	return result;
 }
 
 Napi::Object to_object(Napi::Env env, const km2::lsp::semantic_tokens_legend& legend) {

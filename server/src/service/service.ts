@@ -1,6 +1,6 @@
 import { integer } from 'vscode-languageserver';
 
-const native_package = require('../../build/Release/km2lsp_node_service');
+const km2lsp_node_service_binding = require('bindings')('km2lsp_node_service');
 
 export interface TextSegment {
 	begin: integer;
@@ -54,7 +54,7 @@ export interface CompilationError {
 export class Service {
 	native: any;
 	constructor() {
-		this.native = new native_package.Service();
+		this.native = new km2lsp_node_service_binding.Service();
 	}
 
 	registerSemanticTokens(clientCap: SemanticTokensClientCapability): SemanticTokensLegend {
@@ -73,8 +73,8 @@ export class Service {
 		return this.native.semanticTokens(uri);
 	}
 
-	hover(uri: string, line: integer, character: integer): string|undefined {
-		return this.native.hover(uri, line, character); 
+	hover(uri: string, offset: integer): string|undefined {
+		return this.native.hover(uri, offset); 
 	}
 
 	complete(uri: string, line: integer, character: integer): string[] {
@@ -82,12 +82,22 @@ export class Service {
 	}
 }
 
-export const init = () => {
-	console.log('cxx', native_package);
-	console.log(`cxx.sayHi() ${native_package.sayHi()}`);
-	console.log('cxx.sayHi()', native_package.sayHi());
+class AA {
 
-	const service = new native_package.Service();
+}
+
+export const init = () => {
+	console.log('aa:', AA);
+	console.log('aa:', new AA());
+	
+
+	console.log('km2lsp_node_service_binding:', km2lsp_node_service_binding);
+	//console.log(`cxx.sayHi() ${km2lsp_node_service_binding.sayHi()}`);
+	//console.log('cxx.sayHi()', km2lsp_node_service_binding.sayHi());
+
+	console.log('service.ctor:', km2lsp_node_service_binding.Service);
+
+	const service = new km2lsp_node_service_binding.Service();
 
 	console.log('service', service);
 	console.log('GetValue', service.hover);
