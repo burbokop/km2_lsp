@@ -16,51 +16,23 @@ import {
 	TextDocumentSyncKind,
 	InitializeResult,
 	HoverParams,
-	ServerRequestHandler,
-	MarkedString,
 	Hover,
 	MarkupContent,
 	DocumentHighlightParams,
 	DocumentHighlight,
-	DocumentHighlightKind,
-	SemanticTokensParams,
-	SemanticTokensDeltaParams,
-	SemanticTokens,
-	SemanticTokensRequest,
-	SemanticTokensPartialResult,
-	SemanticTokensRegistrationOptions,
 	DocumentColorParams,
 	ColorInformation,
 	InitializedParams,
-	SemanticTokensDelta,
-	SemanticTokensDeltaPartialResult,
-	SemanticTokensDeltaRequest,
-	SemanticTokenTypes,
-	SemanticTokensRangeParams,
-	SemanticTokensRangeRequest,
 	SemanticTokensBuilder,
-	SemanticTokensClientCapabilities,
-	SemanticTokensLegend,
-	Range,
-	integer
+	integer,
+	MarkupKind,
 } from 'vscode-languageserver/node';
 
 import {
 	TextDocument
 } from 'vscode-languageserver-textdocument';
 
-// import native addon
-
-
 import * as km2 from './service/service';
-
-// expose module API
-console.log(`km2Service: ${km2}`) ;
-console.log("obk:", km2) ;
-
-km2.init();
-
-const km2_service = new km2.Service();
 
 
 // Create a connection for the server, using Node's IPC as a transport.
@@ -76,10 +48,21 @@ let hasDiagnosticRelatedInformationCapability = false;
 
 
 import logs from './logs';
+import { markAsUntransferable } from 'worker_threads';
 
-const logger = logs(process, 'lsp-sample-server');
+const logger = logs(process, 'km2-lsp-server');
 
 logger.info('Start');
+
+
+import os = require("os");
+import path = require('path');
+
+os.homedir();
+
+const km2_service = new km2.Service(path.join(os.homedir(), 'km2-lsp-server-native.ansi'));
+
+
 
 enum TokenTypes {
 	type = 1,
@@ -149,9 +132,18 @@ connection.onInitialize((params: InitializeParams) => {
 		capabilities.textDocument.publishDiagnostics.relatedInformation
 	);
 
+	const mlsupport = params.capabilities.textDocument!.semanticTokens!.multilineTokenSupport;
+	const opsupport = params.capabilities.textDocument!.semanticTokens!.overlappingTokenSupport;
+	
+
+	logger.debug('client multilineTokenSupport:', mlsupport !== undefined ? mlsupport! : 'not set');
+	logger.debug('client overlappingTokenSupport:', opsupport !== undefined ? opsupport! : 'not set');
+	
+	
+
 	semanticTokensLegend = km2_service.registerSemanticTokens(params.capabilities.textDocument!.semanticTokens!);
 
-	logger.debug('registerSemanticTokens', params.capabilities.textDocument!.semanticTokens!, "->", semanticTokensLegend);
+	logger.debug('registerSemanticTokens', params.capabilities.textDocument!.semanticTokens!.tokenTypes, "->", semanticTokensLegend.tokenTypes);
 
 	//const semanticTokensLegend = computeLegend(params.capabilities.textDocument!.semanticTokens!);
 	const result: InitializeResult = {
@@ -221,19 +213,19 @@ function getTokenBuilder(document: TextDocument): SemanticTokensBuilder {
 	tokenBuilders.set(document.uri, result);
 	return result;
 }
+
 function buildTokens(builder: SemanticTokensBuilder, document: TextDocument) {
-	const toks = km2_service.semanticTokens(document.uri);
+	for(const token of km2_service.semanticTokens(document.uri)) {
+		const begin = document.positionAt(token.segment.begin);
+		const end = document.positionAt(token.segment.end);
+		const len = token.segment.end - token.segment.begin;
 
-	for(const token of toks) {
+
 		const textAtSegment = document.getText({ start: document.positionAt(token.segment.begin), end: document.positionAt(token.segment.end) });
-		const textAtPosition = document.getText({ 
-			start: { line: token.position.line, character: token.position.character }, 
-			end: { line: token.position.line, character: token.position.character + token.position.length } 
-		});
 
-		logger.debug('token: ', token, textAtSegment, semanticTokensLegend.tokenTypes[token.type]);
+		logger.debug('token: ', token.type, textAtSegment, semanticTokensLegend.tokenTypes[token.type]);
 
-		builder.push(token.position.line, token.position.character, token.position.length, token.type, token.modifier);
+		builder.push(begin.line, begin.character, len, token.type, token.modifier);
 	}
 }
 
@@ -271,24 +263,28 @@ connection.onDocumentColor((p: DocumentColorParams): ColorInformation[] | undefi
 });
 
 connection.onHover((params: HoverParams): Hover|undefined => {
-
-
 	logger.debug("onHover:", params);
 
 	const document = documents.get(params.textDocument.uri);
-
 	const result = km2_service.hover(params.textDocument.uri, document?.offsetAt(params.position) as integer);
 	logger.debug("hover result:", result);
-	if(typeof result == 'string') {
+
+	const murkupFormatToKind = (f: km2.MurkupFormat): MarkupKind => {
+		switch(f) {
+			case km2.MurkupFormat.PlainText: return MarkupKind.PlainText;
+			case km2.MurkupFormat.Markdown: return MarkupKind.Markdown;
+			default: return MarkupKind.Markdown;
+		}
+	};
+
+	const murkupStringToContent = (f: km2.MurkupString): MarkupContent => {
 		return {
-			contents: {
-				kind: 'plaintext',
-				value: result
-			}
+			kind: murkupFormatToKind(f.format),
+			value: f.str
 		};
-	} else {
-		return undefined;
-	}
+	};
+
+	return result !== undefined ? { contents: murkupStringToContent(result) } : undefined;
   });
 
 
@@ -323,6 +319,15 @@ function getDocumentSettings(resource: string): Thenable<ExampleSettings> {
 	return result;
 }
 
+documents.onDidOpen(e => {
+	logger.debug('did open:', e, e.document.uri, e.document.getText());
+
+	const errs: km2.CompilationError[] = km2_service.changeContent(e.document.uri, e.document.getText());
+	logger.debug('did open content errs:', errs);
+
+	validateTextDocument(e.document, errs);
+});
+
 // Only keep settings for open documents
 documents.onDidClose(e => {
 	logger.debug('onDidClose', e);
@@ -334,9 +339,10 @@ documents.onDidClose(e => {
 // The content of a text document has changed. This event is emitted
 // when the text document first opened or when its content has changed.
 documents.onDidChangeContent(change => {
-	logger.debug('did change content', change);
+	logger.debug('did change content:', change, change.document.uri, change.document.getText());
 
 	const errs: km2.CompilationError[] = km2_service.changeContent(change.document.uri, change.document.getText());
+	logger.debug('did change content errs:', errs);
 
 	validateTextDocument(change.document, errs);
 });

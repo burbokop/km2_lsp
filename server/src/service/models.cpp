@@ -24,11 +24,10 @@ Napi::Object to_object(Napi::Env env, const wall_e::lex::token& tok) {
 	return result;
 }
 
-Napi::Object to_object(Napi::Env env, const km2::lsp::text_wide_position& position) {
+Napi::Object to_object(Napi::Env env, const km2::markup_string& str) {
 	auto result = Napi::Object::New(env);
-	result.Set(Napi::String::New(env, "line"), Napi::Number::New(env, position.line));
-	result.Set(Napi::String::New(env, "character"), Napi::Number::New(env, position.character));	
-	result.Set(Napi::String::New(env, "length"), Napi::Number::New(env, position.length));
+	result.Set(Napi::String::New(env, "str"), Napi::String::New(env, str.str()));
+	result.Set(Napi::String::New(env, "format"), Napi::Number::New(env, str.format()));	
 	return result;
 }
 
@@ -37,7 +36,6 @@ Napi::Object to_object(Napi::Env env, const km2::lsp::semantic_token& tok) {
 	result.Set(Napi::String::New(env, "type"), Napi::Number::New(env, tok.type));
 	result.Set(Napi::String::New(env, "modifier"), Napi::Number::New(env, tok.modifier));	
 	result.Set(Napi::String::New(env, "segment"), to_object(env, tok.segment));
-	result.Set(Napi::String::New(env, "position"), to_object(env, tok.position));
 	return result;
 };
 

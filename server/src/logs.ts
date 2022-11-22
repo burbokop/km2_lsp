@@ -1,6 +1,7 @@
 import fs = require('fs');
 import path = require('path')
 import stream = require('stream');
+import os = require("os");
 import { ILogObject, Logger } from "tslog";
 
 const mkdirsForFile = (filePath: string) => {
@@ -24,10 +25,10 @@ const initialize = (p: NodeJS.Process, logname: string): Logger => {
 		return ctx.logger;
 	}
 
-	const logFileName = `${logname}.log`;
+	const logFileName = `${logname}.ansi`;
 	const logPath = (() => {
 		if(process.platform === "win32") {
-			return `logs/${logFileName}`;
+			return path.join(os.homedir(), logFileName);
 		} else {
 			return `/tmp/${logFileName}`;
 		}

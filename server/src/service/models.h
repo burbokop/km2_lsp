@@ -11,7 +11,8 @@ Napi::Object to_object(Napi::Env env, const wall_e::text_segment& seg);
 Napi::Object to_object(Napi::Env env, const wall_e::error& err);
 Napi::Object to_object(Napi::Env env, const wall_e::lex::token& tok);
 
-Napi::Object to_object(Napi::Env env, const km2::lsp::text_wide_position& position);
+Napi::Object to_object(Napi::Env env, const km2::markup_string& str);
+
 Napi::Object to_object(Napi::Env env, const km2::lsp::semantic_token& tok);
 Napi::Object to_object(Napi::Env env, const km2::lsp::semantic_tokens_client_capability& capability);
 Napi::Object to_object(Napi::Env env, const km2::lsp::semantic_tokens_legend& legend);
@@ -47,8 +48,8 @@ inline Napi::Array to_array_of_numbers(Napi::Env env, const T& container) {
 }
 
 template<typename T>
-inline std::vector<T> vec_from_array_of_ints(Napi::Array array) {
-	std::vector<T> result;
+inline wall_e::vec<T> vec_from_array_of_ints(Napi::Array array) {
+	wall_e::vec<T> result;
 	result.resize(array.Length());
 	for(std::size_t i = 0; i < array.Length(); ++i) {
 		result[i] = T(array.Get(i).As<Napi::Number>().operator int());
@@ -67,8 +68,8 @@ inline Napi::Array to_array_of_strings(Napi::Env env, const T& container) {
 	return result;
 }
 
-inline std::vector<std::string> vec_from_array_of_strings(Napi::Array array) {
-	std::vector<std::string> result;
+inline wall_e::vec<std::string> vec_from_array_of_strings(Napi::Array array) {
+	wall_e::vec<std::string> result;
 	result.resize(array.Length());
 	for(std::size_t i = 0; i < array.Length(); ++i) {
 		result[i] = array.Get(i).As<Napi::String>();
